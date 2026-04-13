@@ -32,7 +32,9 @@ setup(
             'trajectory_builder = path_planning.trajectory_builder:main',
             'trajectory_loader = path_planning.trajectory_loader:main',
             'trajectory_planner = path_planning.trajectory_planner:main',
-            'trajectory_follower = path_planning.trajectory_follower:main'
+            'trajectory_follower = path_planning.trajectory_follower:main',
+            'leo_trajectory_planner = path_planning.leo_trajectory_planner:main',
+            'map_inflator = path_planning.map_inflator:main'
         ],
     },
 )
