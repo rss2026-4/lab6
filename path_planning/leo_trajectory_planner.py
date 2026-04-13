@@ -46,9 +46,10 @@ class PathPlan(Node):
 
         self.get_logger().info("RRT-Connect planner initialized")
 
-    # ── Map handling ──────────────────────────────────────────────────────
-
     def map_cb(self, msg):
+        """
+        Fires once when the map arrives. Reshape map into 2d array and find free cells
+        """
         self.map_info = msg.info
 
         self.occupancy_grid = np.array(msg.data, dtype=np.int8).reshape((msg.info.height, msg.info.width))
@@ -62,15 +63,12 @@ class PathPlan(Node):
         self.map_cos = np.cos(yaw)
         self.map_sin = np.sin(yaw)
 
-        self.get_logger().info(
-            f"Map received: {msg.info.width}x{msg.info.height}, "
-            f"resolution={msg.info.resolution}, origin=({o.position.x:.2f}, {o.position.y:.2f}), "
-            f"yaw={np.degrees(yaw):.1f}°"
-        )
-
-    # ── Coordinate transforms ─────────────────────────────────────────────
+        self.get_logger().info(f"Map received ")
 
     def world_to_grid(self, x, y):
+        """
+        Convert world coords to grid coords
+        """
         dx = x - self.map_origin_x
         dy = y - self.map_origin_y
         mx = self.map_cos * dx + self.map_sin * dy
@@ -80,21 +78,28 @@ class PathPlan(Node):
         return u, v
 
     def grid_to_world(self, u, v):
+        """
+        Convert grid coords to world coords
+        """
         mx = u * self.map_info.resolution
         my = v * self.map_info.resolution
         x = self.map_cos * mx - self.map_sin * my + self.map_origin_x
         y = self.map_sin * mx + self.map_cos * my + self.map_origin_y
         return x, y
 
-    # ── Collision checking ────────────────────────────────────────────────
-
     def is_free(self, x, y):
+        """
+        Check if a point is not an obstacle
+        """
         u, v = self.world_to_grid(x, y)
         if 0 <= u < self.map_info.width and 0 <= v < self.map_info.height:
             return self.occupancy_grid[v, u] == 0
         return False
 
     def collision_free(self, p1, p2):
+        """
+        Given two points (forms line segment), check if its collision free
+        """
         dist = np.hypot(p2[0] - p1[0], p2[1] - p1[1])
         if dist < 1e-6:
             return self.is_free(p1[0], p1[1])
@@ -106,8 +111,6 @@ class PathPlan(Node):
             if not self.is_free(x, y):
                 return False
         return True
-
-    # ── Pose callback ─────────────────────────────────────────────────────
 
     def pose_cb(self, msg):
         self.car_pose = (msg.pose.pose.position.x, msg.pose.pose.position.y,)
