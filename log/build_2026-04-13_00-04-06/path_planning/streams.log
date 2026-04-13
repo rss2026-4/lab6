@@ -1,0 +1,53 @@
+[37.335s] Invoking command in '/home/racecar/racecar_ws/src/racecar/lab6/build/path_planning': PYTHONPATH=/home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/build --no-deps symlink_data
+[51.279s] /usr/lib/python3/dist-packages/setuptools/dist.py:723: UserWarning: Usage of dash-separated 'script-dir' will not be supported in future versions. Please use the underscore name 'script_dir' instead
+[51.282s]   warnings.warn(
+[52.803s] running develop
+[59.033s] running egg_info
+[59.035s] creating path_planning.egg-info
+[59.045s] writing path_planning.egg-info/PKG-INFO
+[59.075s] writing dependency_links to path_planning.egg-info/dependency_links.txt
+[59.101s] writing entry points to path_planning.egg-info/entry_points.txt
+[59.130s] writing requirements to path_planning.egg-info/requires.txt
+[59.134s] writing top-level names to path_planning.egg-info/top_level.txt
+[59.158s] writing manifest file 'path_planning.egg-info/SOURCES.txt'
+[59.615s] reading manifest file 'path_planning.egg-info/SOURCES.txt'
+[59.999s] writing manifest file 'path_planning.egg-info/SOURCES.txt'
+[61.694s] running build_ext
+[61.712s] Creating /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/lib/python3.10/site-packages/path-planning.egg-link (link to .)
+[61.873s] Installing trajectory_builder script to /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/lib/path_planning
+[61.970s] Installing trajectory_follower script to /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/lib/path_planning
+[62.042s] Installing trajectory_loader script to /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/lib/path_planning
+[62.120s] Installing trajectory_planner script to /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/lib/path_planning
+[62.220s] 
+[62.225s] Installed /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning
+[62.228s] running symlink_data
+[62.266s] symbolically linking /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/package.xml -> /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning
+[62.315s] creating /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/ament_index
+[62.334s] creating /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/ament_index/resource_index
+[62.336s] creating /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/ament_index/resource_index/packages
+[62.386s] symbolically linking /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/resource/path_planning -> /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/ament_index/resource_index/packages
+[62.446s] creating /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/launch
+[62.449s] creating /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/launch/sim
+[62.509s] symbolically linking /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/launch/sim/pf_sim_plan_follow.launch.xml -> /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/launch/sim
+[62.568s] symbolically linking /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/launch/sim/sim_plan.launch.xml -> /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/launch/sim
+[62.656s] symbolically linking /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/launch/sim/sim_plan_follow.launch.xml -> /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/launch/sim
+[62.694s] creating /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/launch/real
+[62.756s] symbolically linking /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/launch/real/real.launch.xml -> /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/launch/real
+[62.836s] creating /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/launch/debug
+[62.888s] symbolically linking /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/launch/debug/build_trajectory.launch.xml -> /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/launch/debug
+[62.975s] symbolically linking /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/launch/debug/follow_trajectory.launch.xml -> /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/launch/debug
+[63.052s] symbolically linking /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/launch/debug/load_trajectory.launch.xml -> /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/launch/debug
+[63.100s] creating /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/config
+[63.122s] creating /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/config/sim
+[63.160s] symbolically linking /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/config/sim/pf_config.yaml -> /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/config/sim
+[63.225s] symbolically linking /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/config/sim/pf_sim_config.yaml -> /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/config/sim
+[63.302s] symbolically linking /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/config/sim/sim_config.yaml -> /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/config/sim
+[63.347s] creating /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/config/real
+[63.412s] symbolically linking /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/config/real/config.yaml -> /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/config/real
+[63.467s] symbolically linking /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/config/real/pf_config.yaml -> /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/config/real
+[63.512s] creating /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/config/debug
+[63.525s] creating /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/example_trajectories
+[63.583s] symbolically linking /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/example_trajectories/trajectory_1.traj -> /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/example_trajectories
+[63.632s] symbolically linking /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/example_trajectories/trajectory_2.traj -> /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/example_trajectories
+[63.680s] symbolically linking /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/example_trajectories/trajectory_3.traj -> /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/share/path_planning/example_trajectories
+[63.896s] Invoked command in '/home/racecar/racecar_ws/src/racecar/lab6/build/path_planning' returned '0': PYTHONPATH=/home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/build --no-deps symlink_data

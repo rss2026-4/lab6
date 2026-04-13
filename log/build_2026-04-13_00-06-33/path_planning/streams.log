@@ -1,0 +1,22 @@
+[40.626s] Invoking command in '/home/racecar/racecar_ws/src/racecar/lab6/build/path_planning': PYTHONPATH=/home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/build --no-deps symlink_data
+[54.880s] /usr/lib/python3/dist-packages/setuptools/dist.py:723: UserWarning: Usage of dash-separated 'script-dir' will not be supported in future versions. Please use the underscore name 'script_dir' instead
+[54.886s]   warnings.warn(
+[56.342s] running develop
+[63.523s] running egg_info
+[63.535s] writing path_planning.egg-info/PKG-INFO
+[63.564s] writing dependency_links to path_planning.egg-info/dependency_links.txt
+[63.602s] writing entry points to path_planning.egg-info/entry_points.txt
+[63.627s] writing requirements to path_planning.egg-info/requires.txt
+[63.649s] writing top-level names to path_planning.egg-info/top_level.txt
+[64.187s] reading manifest file 'path_planning.egg-info/SOURCES.txt'
+[64.770s] writing manifest file 'path_planning.egg-info/SOURCES.txt'
+[66.435s] running build_ext
+[66.437s] Creating /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/lib/python3.10/site-packages/path-planning.egg-link (link to .)
+[66.590s] Installing trajectory_builder script to /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/lib/path_planning
+[66.685s] Installing trajectory_follower script to /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/lib/path_planning
+[66.789s] Installing trajectory_loader script to /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/lib/path_planning
+[66.858s] Installing trajectory_planner script to /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/lib/path_planning
+[66.987s] 
+[67.004s] Installed /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning
+[67.011s] running symlink_data
+[68.715s] Invoked command in '/home/racecar/racecar_ws/src/racecar/lab6/build/path_planning' returned '0': PYTHONPATH=/home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning/build --no-deps symlink_data
