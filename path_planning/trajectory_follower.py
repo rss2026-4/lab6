@@ -7,6 +7,9 @@ from rclpy.node import Node
 from .utils import LineTrajectory
 
 from visualization_msgs.msg import Marker
+import numpy as np
+from scipy.interpolate import BSpline
+
 
 
 
@@ -71,6 +74,22 @@ class PurePursuit(Node):
         marker.color.b = 0.0
 
         self.car_marker_pub.publish(marker)
+
+    def points_to_spline(traj):
+        '''takes in a trajectory and spits out a spline'''
+        # Define knot vector, coefficients, and degree
+        t = [0, 1, 2, 3, 4, 5]
+        c = [-1, 2, 0, -1]
+        k = 2
+
+        # Create a BSpline object
+        spl = BSpline(t, c, k)
+
+        # Evaluate the spline at multiple points
+        x = np.linspace(1.5, 4.5, 50)
+        y = spl(x)
+
+
 
     
     def publish_drive(self,steering):
