@@ -1,0 +1,17 @@
+<launch>
+    <!-- 1. Particle filter from Lab 5 -->
+    <include file="$(find-pkg-share localization)/launch/particle_filter.launch.xml"/>
+
+    <!-- 2. Safety controller from earlier lab -->
+    <include file="$(find-pkg-share safety_controller)/launch/safety_controller.launch.xml"/>
+
+    <!-- 3. Trajectory planner -->
+    <node pkg="path_planning" exec="trajectory_planner" name="trajectory_planner" output="screen">
+        <param from="$(find-pkg-share path_planning)/config/sim/sim_config.yaml"/>
+    </node>
+
+    <!-- 4. Trajectory follower -->
+    <node pkg="path_planning" exec="trajectory_follower" name="trajectory_follower" output="screen">
+        <param from="$(find-pkg-share path_planning)/config/sim/sim_config.yaml"/>
+    </node>
+</launch>
