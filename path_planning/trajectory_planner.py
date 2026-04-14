@@ -66,7 +66,7 @@ class PathPlan(Node):
 
         self.min_pub = self.create_publisher(MarkerArray, "/planned_trajectory/min_point_array", 1)
         
-
+# ── Map Helpers ─────────────────────────────────────────────────
     def map_cb(self, msg):
             self.map = msg
             if self.map.data != msg.data or self.map_received == 0:
@@ -127,6 +127,7 @@ class PathPlan(Node):
         self.get_logger().info("Done! Map dict of size %d created" % len(result))
         return result
 
+# ── Planning Helpers ─────────────────────────────────────────────────
     def init_pose(self, msg):
         self.get_logger().info(f"clicked point: ({msg.pose.pose.position.x, msg.pose.pose.position.y})")
         self.start_pose = self.world_to_cell(msg.pose.pose.position.x, msg.pose.pose.position.y)
@@ -153,6 +154,8 @@ class PathPlan(Node):
         self.trajectory.publish_viz()
         if traj != []:
             self.get_min_obst_dist(traj)
+
+# ── A* Functions ─────────────────────────────────────────────────
 
     def get_dist(self, a, b):
         """
