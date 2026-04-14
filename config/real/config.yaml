@@ -1,3 +1,9 @@
-trajectory_planner:
+leo_trajectory_planner:
   ros__parameters:
-    parameter: "fill this in :)"
+    odom_topic: "/pf/pose/odom"
+    map_topic: "/map"
+    scan_topic: "/scan"
+trajectory_follower:
+  ros__parameters:
+    odom_topic: "/pf/pose/odom"
+    drive_topic: "/vesc/input/navigation"
