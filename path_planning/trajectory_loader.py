@@ -26,6 +26,7 @@ class LoadTrajectory(Node):
         self.pub_topic = "/trajectory/current"
         latched_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.traj_pub = self.create_publisher(PoseArray, self.pub_topic, latched_qos)
+        # self.traj_pub = self.create_publisher(PoseArray, self.pub_topic, 10)
 
         # need to wait a short period of time before publishing the first message
         time.sleep(0.5)

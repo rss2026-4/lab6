@@ -1,0 +1,18 @@
+running develop
+running egg_info
+writing path_planning.egg-info/PKG-INFO
+writing dependency_links to path_planning.egg-info/dependency_links.txt
+writing entry points to path_planning.egg-info/entry_points.txt
+writing requirements to path_planning.egg-info/requires.txt
+writing top-level names to path_planning.egg-info/top_level.txt
+reading manifest file 'path_planning.egg-info/SOURCES.txt'
+writing manifest file 'path_planning.egg-info/SOURCES.txt'
+running build_ext
+Creating /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/lib/python3.10/site-packages/path-planning.egg-link (link to .)
+Installing trajectory_builder script to /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/lib/path_planning
+Installing trajectory_follower script to /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/lib/path_planning
+Installing trajectory_loader script to /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/lib/path_planning
+Installing trajectory_planner script to /home/racecar/racecar_ws/src/racecar/lab6/install/path_planning/lib/path_planning
+
+Installed /home/racecar/racecar_ws/src/racecar/lab6/build/path_planning
+running symlink_data

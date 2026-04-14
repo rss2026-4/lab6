@@ -17,6 +17,7 @@ launch/sim/pf_sim_plan_follow.launch.xml
 launch/sim/sim_plan.launch.xml
 launch/sim/sim_plan_follow.launch.xml
 path_planning/__init__.py
+path_planning/test.py
 path_planning/trajectory_builder.py
 path_planning/trajectory_follower.py
 path_planning/trajectory_loader.py
