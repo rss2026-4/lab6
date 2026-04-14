@@ -1,5 +1,5 @@
 <launch>
-    <node pkg="path_planning" exec="trajectory_planner" name="leo_trajectory_planner" output="screen">
+    <node pkg="path_planning" exec="leo_trajectory_planner" name="leo_trajectory_planner" output="screen">
         <param from="$(find-pkg-share path_planning)/config/real/config.yaml"/>
     </node>
     <node pkg="path_planning" exec="trajectory_follower" name="trajectory_follower" output="screen">
