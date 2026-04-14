@@ -1,4 +1,4 @@
-leo_trajectory_planner:
+trajectory_planner:
   ros__parameters:
     odom_topic: "/pf/pose/odom"
     map_topic: "/map"
