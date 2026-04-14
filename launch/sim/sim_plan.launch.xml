@@ -1,4 +1,5 @@
 <launch>
+    <node pkg="path_planning" exec="map_inflator" name="map_inflator" output="screen"/>
     <node pkg="path_planning" exec="trajectory_planner" name="trajectory_planner" output="screen">
         <param from="$(find-pkg-share path_planning)/config/sim/sim_config.yaml"/>
     </node>
