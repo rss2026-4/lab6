@@ -4,9 +4,9 @@ from geometry_msgs.msg import PoseArray, PoseStamped, PoseWithCovarianceStamped
 from nav_msgs.msg import OccupancyGrid, Odometry
 from path_planning.utils import LineTrajectory
 from rclpy.node import Node
-
+from visualization_msgs.msg import Marker, MarkerArray
 import heapq as hp
-
+from std_msgs.msg import Header
 import numpy as np
 
 
@@ -63,6 +63,8 @@ class PathPlan(Node):
         self.map_received = 0
         self.start_pose = None
         self.goal_pose = None
+
+        self.min_pub = self.create_publisher(MarkerArray, "/planned_trajectory/min_point_array", 1)
         
 
     def map_cb(self, msg):
@@ -142,11 +144,13 @@ class PathPlan(Node):
             self.plan_path(self.start_pose, self.goal_pose, self.map_received)
   
     def plan_path(self, start_point, end_point, map):
-        
-        self.trajectory.points = self.a_star_search(start_point, end_point)
+        traj = self.a_star_search(start_point, end_point)
+        self.trajectory.points = traj
         self.traj_pub.publish(self.trajectory.toPoseArray())
         self.get_logger().info("Visualizing path")
         self.trajectory.publish_viz()
+        if traj != []:
+            self.get_min_obst_dist(traj)
 
     def get_dist(self, a, b):
         """
@@ -177,7 +181,7 @@ class PathPlan(Node):
         frontier = []
         hp.heapify(frontier)
         hp.heappush(frontier, (0, start)) #add start to priority queue with lowest cost
-
+        start_time = self.get_clock().now().nanoseconds / 1e9
         while frontier:
             # self.get_logger().info("Planning")
             # path = frontier.pop(0)
@@ -187,7 +191,8 @@ class PathPlan(Node):
             
             if current_pos == end:
                 # self.get_logger().info("%s" % end)
-                self.get_logger().info("Goal Reached! Path Planned :3")
+                end_time = self.get_clock().now().nanoseconds / 1e9
+                self.get_logger().info(f"Goal Reached! Path Planned in {end_time-start_time} seconds")
                 return self.extract_path(came_from)
             
             for neighbor in self.get_neighbors(current_pos):
@@ -259,6 +264,95 @@ class PathPlan(Node):
             return False
         
         return True
+
+    def get_obstacles(self, occup_threshold=0.5):
+        obstacles = set()
+        for point in self.map_dict:
+            if self.map_dict[point] >= occup_threshold:
+                obstacles.add(point)
+        self.get_logger().info("all obstacles found")
+        
+        return obstacles
+
+    def make_header(self, frame_id, stamp=None):
+        if stamp is None:
+            stamp = self.get_clock().now().to_msg()
+        header = Header()
+        header.stamp = stamp
+        header.frame_id = frame_id
+        return header
+
+    def get_min_obst_dist(self, path):
+        min_dist = np.inf
+        min_dist_point = None
+        min_path_point = None
+        obstacles = self.get_obstacles()
+        
+        # ik its not that efficient but whatevs, its not meant for real time execution anyways
+        for point in path:
+            point_cell = self.world_to_cell(point[0], point[1])
+            for i in range(-20, 20):
+                for j in range(-20, 20):
+                    candidate = (point_cell[0]+i, point_cell[1]+j)
+                    
+                    if candidate in obstacles:
+                        cand_real = self.grid_to_world(*candidate)
+                        dist = self.get_dist(point, cand_real)
+                        
+                        if dist < min_dist:
+                            min_dist_point = cand_real
+                            min_path_point = point
+                            min_dist = dist                            
+                            self.pub_min_vis(min_path_point, min_dist_point)
+
+            
+        self.get_logger().info(f"Min at path point {min_path_point}, nearest obstacle at {min_dist_point} with dist: {min_dist} m")
+
+    def pub_min_vis(self, path_point, min_point):
+        "takes in point in world frame"
+        points = MarkerArray() 
+
+        min_marker = Marker()
+        min_marker.header = self.make_header("/map")
+        min_marker.ns = "/planned_trajectory/trajectory"
+        min_marker.id = 0
+        min_marker.type = 2  # sphere
+        min_marker.lifetime = rclpy.duration.Duration(seconds=0).to_msg()
+        min_marker.action = 0
+        min_marker.pose.position.x = min_point[0]
+        min_marker.pose.position.y = min_point[1]
+        min_marker.pose.orientation.w = 1.0
+        min_marker.scale.x = 1.0
+        min_marker.scale.y = 1.0
+        min_marker.scale.z = 1.0
+        min_marker.color.r = 0.0
+        min_marker.color.g = 1.0
+        min_marker.color.b = 1.0
+        min_marker.color.a = 1.0
+
+        path_marker = Marker()
+        path_marker.header = self.make_header("/map")
+        path_marker.ns = "/planned_trajectory/trajectory"
+        path_marker.id = 1
+        path_marker.type = 2  # sphere
+        path_marker.lifetime = rclpy.duration.Duration(seconds=0).to_msg()
+        path_marker.action = 0
+        path_marker.pose.position.x = path_point[0]
+        path_marker.pose.position.y = path_point[1]
+        path_marker.pose.orientation.w = 1.0
+        path_marker.scale.x = 1.0
+        path_marker.scale.y = 1.0
+        path_marker.scale.z = 1.0
+        path_marker.color.r = 0.5
+        path_marker.color.g = 1.0
+        path_marker.color.b = 0.5
+        path_marker.color.a = 1.0
+
+        points.markers.append(min_marker)
+        points.markers.append(path_marker)
+        
+        self.min_pub.publish(points)
+
 
 def main(args=None):
     rclpy.init(args=args)
