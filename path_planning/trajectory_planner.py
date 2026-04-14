@@ -146,8 +146,10 @@ class PathPlan(Node):
     def plan_path(self, start_point, end_point, map):
         traj = self.a_star_search(start_point, end_point)
         self.trajectory.points = traj
+        self.trajectory.update_distances()
+        self.get_logger().info(f"total path length = {(self.trajectory.distances[-1])}")
         self.traj_pub.publish(self.trajectory.toPoseArray())
-        self.get_logger().info("Visualizing path")
+        self.get_logger().info("Visualizing path\n")
         self.trajectory.publish_viz()
         if traj != []:
             self.get_min_obst_dist(traj)
