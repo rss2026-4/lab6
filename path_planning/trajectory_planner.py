@@ -16,12 +16,19 @@ class PathPlan(Node):
     current car pose using RRT-Connect.
     """
 
-    STEP_SIZE = 0.5 # each new branch of tree is at most this distance long (meters)
-    GOAL_THRESHOLD = 0.5 # this is the radius of the goal (meters)
-    MAX_ITERATIONS = 10000 # self explanatory
-    COLLISION_CHECK_RESOLUTION = 0.1 # when checking if line segment is collision free, sample point every this distance (meters)
-    SHORTCUT_ITERATIONS = 200 # self explanatory
-    VIZ_EVERY_N = 5 # frequency to update visualization markers
+    STEP_SIZE = 0.5                    # max branch length (meters)
+    GOAL_THRESHOLD = 0.5               # goal radius (meters)
+    MAX_ITERATIONS = 10000
+    COLLISION_CHECK_RESOLUTION = 0.05  # sample every this distance along segments (meters)
+    SHORTCUT_ITERATIONS = 200
+    SHORTCUT_MARGIN = 0.3              # lateral safety margin for shortcut checks (meters)
+    VIZ_EVERY_N = 5
+
+    # smoothing / resampling
+    MIN_TURN_RADIUS = 0.9              # L / tan(max_steering) ≈ 0.325 / tan(0.34)
+    RESAMPLE_SPACING = 0.15            # dense resampling before smoothing (meters)
+    SMOOTH_ITERATIONS = 500
+    SMOOTH_WEIGHT = 0.3                # how aggressively to pull waypoints toward smooth line
 
     def __init__(self):
         super().__init__("trajectory_planner")
@@ -47,29 +54,29 @@ class PathPlan(Node):
 
         self.get_logger().info("RRT-Connect planner initialized")
 
-    def map_cb(self, msg):
-        """
-        Fires once when the map arrives. Reshape map into 2d array and find free cells
-        """
-        self.map_info = msg.info
+    # ── Map handling ──────────────────────────────────────────────────────
 
-        self.occupancy_grid = np.array(msg.data, dtype=np.int8).reshape((msg.info.height, msg.info.width))
+    def map_cb(self, msg):
+        """Fires when the map arrives. Reshape into 2D array and cache free cells."""
+        self.map_info = msg.info
+        self.occupancy_grid = np.array(msg.data, dtype=np.int8).reshape(
+            (msg.info.height, msg.info.width))
         self.free_cells = np.argwhere(self.occupancy_grid == 0)
 
         o = msg.info.origin
         q = o.orientation
-        yaw = np.arctan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+        yaw = np.arctan2(2.0 * (q.w * q.z + q.x * q.y),
+                         1.0 - 2.0 * (q.y * q.y + q.z * q.z))
         self.map_origin_x = o.position.x
         self.map_origin_y = o.position.y
         self.map_cos = np.cos(yaw)
         self.map_sin = np.sin(yaw)
 
-        self.get_logger().info(f"Map received ")
+        self.get_logger().info("Map received")
+
+    # ── Coordinate transforms ─────────────────────────────────────────────
 
     def world_to_grid(self, x, y):
-        """
-        Convert world coords to grid coords
-        """
         dx = x - self.map_origin_x
         dy = y - self.map_origin_y
         mx = self.map_cos * dx + self.map_sin * dy
@@ -79,42 +86,57 @@ class PathPlan(Node):
         return u, v
 
     def grid_to_world(self, u, v):
-        """
-        Convert grid coords to world coords
-        """
         mx = u * self.map_info.resolution
         my = v * self.map_info.resolution
         x = self.map_cos * mx - self.map_sin * my + self.map_origin_x
         y = self.map_sin * mx + self.map_cos * my + self.map_origin_y
         return x, y
 
-    def is_free(self, x, y):
-        """
-        Check if a point is not an obstacle
+    # ── Collision helpers ─────────────────────────────────────────────────
+
+    def is_free(self, x, y, strict=False):
+        """Check if a point is not an obstacle.
+        strict=False: allows soft-cost cells (value < 100) for planning.
+        strict=True:  only truly free cells (value == 0).
         """
         u, v = self.world_to_grid(x, y)
         if 0 <= u < self.map_info.width and 0 <= v < self.map_info.height:
-            return self.occupancy_grid[v, u] == 0
+            val = self.occupancy_grid[v, u]
+            if strict:
+                return val == 0
+            return val < 100
         return False
 
-    def collision_free(self, p1, p2):
-        """
-        Given two points (forms line segment), check if its collision free
+    def collision_free(self, p1, p2, margin=0.0):
+        """Check if line segment p1→p2 is collision free.
+        If margin > 0, also checks points offset laterally by that distance
+        to prevent wall-grazing shortcuts.
         """
         dist = np.hypot(p2[0] - p1[0], p2[1] - p1[1])
         if dist < 1e-6:
             return self.is_free(p1[0], p1[1])
         n_checks = max(2, int(dist / self.COLLISION_CHECK_RESOLUTION))
+
+        dx, dy = (p2[0] - p1[0]) / dist, (p2[1] - p1[1]) / dist
+        nx, ny = -dy, dx  # unit normal to the segment
+
         for i in range(n_checks + 1):
             t = i / n_checks
-            x = p1[0] + t * (p2[0] - p1[0])
-            y = p1[1] + t * (p2[1] - p1[1])
-            if not self.is_free(x, y):
+            cx = p1[0] + t * (p2[0] - p1[0])
+            cy = p1[1] + t * (p2[1] - p1[1])
+            if not self.is_free(cx, cy):
                 return False
+            if margin > 0:
+                if not self.is_free(cx + nx * margin, cy + ny * margin):
+                    return False
+                if not self.is_free(cx - nx * margin, cy - ny * margin):
+                    return False
         return True
 
+    # ── Pose callbacks ────────────────────────────────────────────────────
+
     def pose_cb(self, msg):
-        self.car_pose = (msg.pose.pose.position.x, msg.pose.pose.position.y,)
+        self.car_pose = (msg.pose.pose.position.x, msg.pose.pose.position.y)
 
     def initialpose_cb(self, msg):
         self.clear_trees()
@@ -157,9 +179,7 @@ class PathPlan(Node):
         return (from_pt[0] + dx * ratio, from_pt[1] + dy * ratio)
 
     def extend(self, tree_points, tree_parents, point):
-        """Extend tree toward point. Returns (status, new_node_index).
-        status: 'reached' if point was reached, 'advanced' if partial, 'trapped' if blocked.
-        """
+        """Extend tree toward point. Returns (status, new_node_index)."""
         near_idx = self.nearest(tree_points, point)
         near_pt = (tree_points[near_idx][0], tree_points[near_idx][1])
         new_pt = self.steer(near_pt, point)
@@ -174,13 +194,14 @@ class PathPlan(Node):
         return "trapped", -1
 
     def connect(self, tree_points, tree_parents, point):
-        """Greedily extend tree toward point until it reaches or gets trapped."""
+        """Greedily extend tree toward point until reached or trapped."""
         while True:
             status, idx = self.extend(tree_points, tree_parents, point)
             if status != "advanced":
                 return status, idx
 
-    def extract_path(self, tree_a_points, tree_a_parents, tree_b_points, tree_b_parents, a_idx, b_idx):
+    def extract_path(self, tree_a_points, tree_a_parents,
+                     tree_b_points, tree_b_parents, a_idx, b_idx):
         """Extract full path from start to goal by merging both trees."""
         path_a = []
         idx = a_idx
@@ -198,23 +219,19 @@ class PathPlan(Node):
         return path_a + path_b
 
     def sample_free(self):
-        """Sample a random free grid cell and convert it to world coordinates."""
+        """Sample a random free grid cell and convert to world coordinates."""
         if self.free_cells is None or len(self.free_cells) == 0:
             return None
-
         idx = np.random.randint(len(self.free_cells))
         v, u = self.free_cells[idx]
         return self.grid_to_world(u + 0.5, v + 0.5)
 
-    def clear_current_plan(self):
-        """Clear the currently published plan so the follower does not use stale data."""
-        self.trajectory.clear()
-        self.traj_pub.publish(self.trajectory.toPoseArray())
-        self.trajectory.publish_viz()
-        self.clear_trees()
+    # ── Path post-processing ─────────────────────────────────────────────
 
     def shortcut_path(self, path):
-        """Iteratively try to shortcut the path by connecting non-adjacent waypoints."""
+        """Iteratively shortcut the path. Uses lateral margin to prevent
+        shortcuts that graze walls.
+        """
         if len(path) <= 2:
             return path
         path = list(path)
@@ -223,9 +240,72 @@ class PathPlan(Node):
                 break
             i = np.random.randint(0, len(path) - 2)
             j = np.random.randint(i + 2, len(path))
-            if self.collision_free(path[i], path[j]):
+            if self.collision_free(path[i], path[j], margin=self.SHORTCUT_MARGIN):
                 path = path[:i + 1] + path[j:]
         return path
+
+    def resample_path(self, path):
+        """Resample path into evenly spaced points so smoothing works uniformly."""
+        if len(path) < 2:
+            return path
+        resampled = [path[0]]
+        leftover = 0.0
+        for i in range(1, len(path)):
+            dx = path[i][0] - path[i - 1][0]
+            dy = path[i][1] - path[i - 1][1]
+            seg_len = np.hypot(dx, dy)
+            if seg_len < 1e-9:
+                continue
+            ux, uy = dx / seg_len, dy / seg_len
+            consumed = self.RESAMPLE_SPACING - leftover
+            while consumed <= seg_len:
+                resampled.append((
+                    path[i - 1][0] + ux * consumed,
+                    path[i - 1][1] + uy * consumed,
+                ))
+                consumed += self.RESAMPLE_SPACING
+            leftover = seg_len - (consumed - self.RESAMPLE_SPACING)
+        resampled.append(path[-1])
+        return resampled
+
+    @staticmethod
+    def turning_radius(p0, p1, p2):
+        """Radius of the circle through three consecutive points (Menger curvature)."""
+        ax, ay = p1[0] - p0[0], p1[1] - p0[1]
+        bx, by = p2[0] - p1[0], p2[1] - p1[1]
+        cross = abs(ax * by - ay * bx)
+        if cross < 1e-12:
+            return float("inf")
+        a = np.hypot(ax, ay)
+        b = np.hypot(bx, by)
+        c = np.hypot(p2[0] - p0[0], p2[1] - p0[1])
+        return (a * b * c) / (2.0 * cross)
+
+    def smooth_path(self, path):
+        """Iteratively smooth while enforcing minimum turning radius
+        and collision safety. Falls back to original if smoothing
+        introduces a collision.
+        """
+        if len(path) <= 2:
+            return path
+        pts = [list(p) for p in path]
+        for _ in range(self.SMOOTH_ITERATIONS):
+            for i in range(1, len(pts) - 1):
+                new_x = pts[i][0] + self.SMOOTH_WEIGHT * (
+                    pts[i - 1][0] + pts[i + 1][0] - 2.0 * pts[i][0])
+                new_y = pts[i][1] + self.SMOOTH_WEIGHT * (
+                    pts[i - 1][1] + pts[i + 1][1] - 2.0 * pts[i][1])
+                r = self.turning_radius(pts[i - 1], (new_x, new_y), pts[i + 1])
+                if r >= self.MIN_TURN_RADIUS:
+                    pts[i][0] = new_x
+                    pts[i][1] = new_y
+        # verify collision-free; fall back to original if not
+        for i in range(len(pts) - 1):
+            if not self.collision_free(pts[i], pts[i + 1]):
+                return path
+        return [tuple(p) for p in pts]
+
+    # ── Visualization ─────────────────────────────────────────────────────
 
     def publish_tree(self, publisher, tree_points, tree_parents, r, g, b, marker_id):
         marker = Marker()
@@ -252,6 +332,15 @@ class PathPlan(Node):
             marker.id = mid
             marker.action = Marker.DELETE
             pub.publish(marker)
+
+    def clear_current_plan(self):
+        """Clear the currently published plan so the follower does not use stale data."""
+        self.trajectory.clear()
+        self.traj_pub.publish(self.trajectory.toPoseArray())
+        self.trajectory.publish_viz()
+        self.clear_trees()
+
+    # ── Main planning loop ────────────────────────────────────────────────
 
     def plan_path(self, start_point, end_point):
         self.clear_trees()
@@ -294,15 +383,23 @@ class PathPlan(Node):
                     self.publish_tree(self.tree_b_pub, goal_tree, goal_parents, 1.0, 0.0, 0.0, 1)
 
                     elapsed = time.time() - t_start
-                    self.get_logger().info(f"RRT-Connect found path in {i+1} iterations, {elapsed:.2f}s")
+                    self.get_logger().info(
+                        f"RRT-Connect found path in {i+1} iterations, {elapsed:.2f}s")
 
                     if swapped:
-                        raw_path = self.extract_path(tree_b_points, tree_b_parents, tree_a_points, tree_a_parents, idx_b, idx_a)
+                        raw_path = self.extract_path(
+                            tree_b_points, tree_b_parents,
+                            tree_a_points, tree_a_parents, idx_b, idx_a)
                     else:
-                        raw_path = self.extract_path(tree_a_points, tree_a_parents, tree_b_points, tree_b_parents, idx_a, idx_b)
+                        raw_path = self.extract_path(
+                            tree_a_points, tree_a_parents,
+                            tree_b_points, tree_b_parents, idx_a, idx_b)
 
                     path = self.shortcut_path(raw_path)
-                    self.get_logger().info(f"Path: {len(raw_path)} -> {len(path)} points after shortcutting")
+                    path = self.resample_path(path)
+                    path = self.smooth_path(path)
+                    self.get_logger().info(
+                        f"Path: {len(raw_path)} raw -> {len(path)} after shortcut/resample/smooth")
 
                     self.trajectory.clear()
                     for pt in path:
@@ -321,7 +418,8 @@ class PathPlan(Node):
             swapped = not swapped
 
         elapsed = time.time() - t_start
-        self.get_logger().error(f"RRT-Connect failed to find path after {self.MAX_ITERATIONS} iterations ({elapsed:.2f}s)")
+        self.get_logger().error(
+            f"RRT-Connect failed after {self.MAX_ITERATIONS} iterations ({elapsed:.2f}s)")
         self.clear_current_plan()
 
 
@@ -330,8 +428,6 @@ def main(args=None):
     planner = PathPlan()
     rclpy.spin(planner)
     rclpy.shutdown()
-
-
 
 # import rclpy
 
