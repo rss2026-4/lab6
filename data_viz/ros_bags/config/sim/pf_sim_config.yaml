@@ -1,0 +1,9 @@
+trajectory_planner:
+  ros__parameters:
+    odom_topic: "/pf/pose/odom"
+    map_topic: "/inflated_map"
+    scan_topic: "/scan"
+trajectory_follower:
+  ros__parameters:
+    odom_topic: "/pf/pose/odom"
+    drive_topic: "/drive"
