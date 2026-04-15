@@ -27,12 +27,15 @@ class PurePursuit(Node):
         self.drive_topic = self.get_parameter('drive_topic').get_parameter_value().string_value
 
         self.lookahead = 0.5  # FILL IN #
-        self.speed = 0.5  # FILL IN #
+        self.speed = 1.0  # FILL IN #
         self.wheelbase_length = 0.325  # FILL IN #
         self.max_steer = 0.34
 
         self.path_x = None
         self.path_y = None
+
+        self.final_x = None
+        self.final_y = None
 
         self.initialized_traj = False
         self.trajectory = LineTrajectory(self, "/followed_trajectory")
@@ -60,13 +63,21 @@ class PurePursuit(Node):
 
         if self.path_x is None or len(self.path_x) < 2:
             return
+
+
         
         pose_x = odometry_msg.pose.pose.position.x
         pose_y = odometry_msg.pose.pose.position.y
         pose = np.array([pose_x, pose_y])
 
+        
         self.get_logger().info(f"Pose ({pose})")
 
+        if np.sqrt((pose_x-self.final_x)**2+(pose_y-self.final_y)**2) < 0.5:
+            self.get_logger().info(f"I refuse")
+            self.publish_drive(0.0,0.0)
+            return
+        
         min_dist = 1e9
         closest_seg = 0
 
@@ -138,13 +149,13 @@ class PurePursuit(Node):
             self.pure_pursuit(goal_x_car, goal_y_car)
 
 
-    def publish_drive(self,steering):
+    def publish_drive(self,steering, cur_speed):
         drive_msg = AckermannDriveStamped()
         drive_msg.header.frame_id = "base_link"
         drive_msg.header.stamp = self.get_clock().now().to_msg()
         drive_msg.drive.steering_angle = steering
         self.get_logger().info(f"steering angle {steering}")
-        drive_msg.drive.speed = self.speed
+        drive_msg.drive.speed = cur_speed
         self.drive_pub.publish(drive_msg)
 
 
@@ -157,10 +168,9 @@ class PurePursuit(Node):
             self.lookahead
         )
 
-        self.publish_drive(steering_angle)
+        self.publish_drive(steering_angle, self.speed)
 
 
-    
     def trajectory_callback(self, msg):
         self.get_logger().info(f"Receiving new trajectory {len(msg.poses)} points")
         self.trajectory.clear()
@@ -168,12 +178,15 @@ class PurePursuit(Node):
         self.trajectory.publish_viz(duration=0.0)
         self.initialized_traj = True
 
-        #processing trajectory into list of points
+        # processing trajectory into list of points
         self.path_x = []
         self.path_y = []
         for i, pose in enumerate(msg.poses):
             self.path_x.append(pose.position.x)
             self.path_y.append(pose.position.y)
+            
+        self.final_x = self.path_x[-1]
+        self.final_y = self.path_y[-1]
 
 
 def main(args=None):

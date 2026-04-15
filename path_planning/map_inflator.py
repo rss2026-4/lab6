@@ -10,7 +10,7 @@ from rclpy.qos import DurabilityPolicy, QoSProfile
 class MapInflator(Node):
     """Subscribes to /map, inflates occupied pixels, and republishes as /inflated_map."""
 
-    INFLATION_RADIUS_PX = 5
+    INFLATION_RADIUS_PX = 10
 
     def __init__(self):
         super().__init__("map_inflator")
