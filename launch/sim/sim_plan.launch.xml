@@ -1,6 +1,9 @@
 <launch>
     <node pkg="path_planning" exec="map_inflator" name="map_inflator" output="screen"/>
-    <node pkg="path_planning" exec="leo_trajectory_planner" name="trajectory_planner" output="screen">
+    <node pkg="path_planning" exec="rrt_planner" name="rrt_planner" output="screen">
+        <param from="$(find-pkg-share path_planning)/config/sim/sim_config.yaml"/>
+    </node>
+    <node pkg="path_planning" exec="astar_planner" name="astar_planner" output="screen">
         <param from="$(find-pkg-share path_planning)/config/sim/sim_config.yaml"/>
     </node>
 </launch>

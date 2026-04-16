@@ -1,8 +1,12 @@
-trajectory_planner:
+rrt_planner:
   ros__parameters:
     odom_topic: "/odom"
     map_topic: "/inflated_map"
     scan_topic: "/scan"
+astar_planner:
+  ros__parameters:
+    odom_topic: "/odom"
+    map_topic: "/inflated_map"
 trajectory_follower:
   ros__parameters:
     odom_topic: "/odom"

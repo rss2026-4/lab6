@@ -23,7 +23,7 @@ class PathPlan(Node):
     VIZ_EVERY_N = 5 # frequency to update visualization markers
 
     def __init__(self):
-        super().__init__("trajectory_planner")
+        super().__init__("rrt_planner")
         self.declare_parameter('odom_topic', "default")
         self.declare_parameter('map_topic', "default")
         self.odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
@@ -37,7 +37,7 @@ class PathPlan(Node):
         self.tree_b_pub = self.create_publisher(Marker, "/rrt/tree_b", 1)
         self.initialpose_sub = self.create_subscription(PoseWithCovarianceStamped, "/initialpose", self.initialpose_cb, 10)
 
-        self.trajectory = LineTrajectory(node=self, viz_namespace="/planned_trajectory")
+        self.trajectory = LineTrajectory(node=self, viz_namespace="/planned_trajectory", color=(0.0, 0.0, 1.0))
 
         self.map_info = None
         self.occupancy_grid = None
@@ -131,10 +131,6 @@ class PathPlan(Node):
             self.get_logger().warn("No car pose received yet, cannot plan")
             return
         goal = (msg.pose.position.x, msg.pose.position.y)
-        self.get_logger().info(
-            f"Planning from ({self.car_pose[0]:.2f}, {self.car_pose[1]:.2f}) "
-            f"to ({goal[0]:.2f}, {goal[1]:.2f})"
-        )
         self.plan_path(self.car_pose, goal)
 
     # ── RRT-Connect core ─────────────────────────────────────────────────
@@ -252,6 +248,23 @@ class PathPlan(Node):
             marker.action = Marker.DELETE
             pub.publish(marker)
 
+    def get_min_obst_dist(self, path):
+        """Find the minimum distance from the path to any obstacle cell."""
+        min_dist = np.inf
+        for pt in path:
+            u, v = self.world_to_grid(pt[0], pt[1])
+            for di in range(-20, 21):
+                for dj in range(-20, 21):
+                    nu, nv = u + di, v + dj
+                    if 0 <= nu < self.map_info.width and 0 <= nv < self.map_info.height:
+                        if self.occupancy_grid[nv, nu] != 0:
+                            ox, oy = self.grid_to_world(nu, nv)
+                            dist = np.hypot(pt[0] - ox, pt[1] - oy)
+                            if dist < min_dist:
+                                min_dist = dist
+        inflation_m = 8 * 0.0504
+        self.get_logger().info(f"min obstacle dist: {min_dist + inflation_m:.4f} m")
+
     def plan_path(self, start_point, end_point):
         self.clear_trees()
         self.trajectory.clear()
@@ -293,7 +306,7 @@ class PathPlan(Node):
                     self.publish_tree(self.tree_b_pub, goal_tree, goal_parents, 1.0, 0.0, 0.0, 1)
 
                     elapsed = time.time() - t_start
-                    self.get_logger().info(f"RRT-Connect found path in {i+1} iterations, {elapsed:.2f}s")
+                    self.get_logger().info(f"planning time: {elapsed:.2f} s")
 
                     if swapped:
                         raw_path = self.extract_path(tree_b_points, tree_b_parents, tree_a_points, tree_a_parents, idx_b, idx_a)
@@ -301,11 +314,13 @@ class PathPlan(Node):
                         raw_path = self.extract_path(tree_a_points, tree_a_parents, tree_b_points, tree_b_parents, idx_a, idx_b)
 
                     path = self.shortcut_path(raw_path)
-                    self.get_logger().info(f"Path: {len(raw_path)} -> {len(path)} points after shortcutting")
 
                     self.trajectory.clear()
                     for pt in path:
                         self.trajectory.addPoint(pt)
+                    self.trajectory.update_distances()
+                    self.get_logger().info(f"path length: {self.trajectory.distances[-1]:.2f} m")
+                    self.get_min_obst_dist(path)
 
                     self.traj_pub.publish(self.trajectory.toPoseArray())
                     self.trajectory.publish_viz()

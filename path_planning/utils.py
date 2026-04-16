@@ -17,13 +17,14 @@ EPSILON = 0.00000000001
 class LineTrajectory:
     """ A class to wrap and work with piecewise linear trajectories. """
 
-    def __init__(self, node, viz_namespace=None):
+    def __init__(self, node, viz_namespace=None, color=(1.0, 1.0, 1.0)):
         self.points: List[Tuple[float, float]] = []
         self.distances = []
         self.has_acceleration = False
         self.visualize = False
         self.viz_namespace = viz_namespace
         self.node = node
+        self.color = color
 
         if viz_namespace:
             self.visualize = True
@@ -68,7 +69,6 @@ class LineTrajectory:
             return (1.0 - t) * self.distances[i] + t * self.distances[i + 1]
 
     def addPoint(self, point: Tuple[float, float]) -> None:
-        print("adding point to trajectory:", point)
         self.points.append(point)
         self.update_distances()
         self.mark_dirty()
@@ -131,9 +131,7 @@ class LineTrajectory:
 
     def publish_start_point(self, duration=0.0, scale=0.1):
         should_publish = len(self.points) > 0
-        self.node.get_logger().info("Before Publishing start point")
         if self.visualize and self.start_pub.get_subscription_count() > 0:
-            self.node.get_logger().info("Publishing start point")
             marker = Marker()
             marker.header = self.make_header("/map")
             marker.ns = self.viz_namespace + "/trajectory"
@@ -157,8 +155,6 @@ class LineTrajectory:
                 marker.action = 2
 
             self.start_pub.publish(marker)
-        elif self.start_pub.get_subscription_count() == 0:
-            self.node.get_logger().info("Not publishing start point, no subscribers")
 
     def publish_end_point(self, duration=0.0):
         should_publish = len(self.points) > 1
@@ -186,13 +182,10 @@ class LineTrajectory:
                 marker.action = 2
 
             self.end_pub.publish(marker)
-        elif self.end_pub.get_subscription_count() == 0:
-            print("Not publishing end point, no subscribers")
 
     def publish_trajectory(self, duration=0.0):
         should_publish = len(self.points) > 1
         if self.visualize and self.traj_pub.get_subscription_count() > 0:
-            self.node.get_logger().info("Publishing trajectory")
             marker = Marker()
             marker.header = self.make_header("/map")
             marker.ns = self.viz_namespace + "/trajectory"
@@ -202,9 +195,9 @@ class LineTrajectory:
             if should_publish:
                 marker.action = marker.ADD
                 marker.scale.x = 0.3
-                marker.color.r = 1.0
-                marker.color.g = 1.0
-                marker.color.b = 1.0
+                marker.color.r = float(self.color[0])
+                marker.color.g = float(self.color[1])
+                marker.color.b = float(self.color[2])
                 marker.color.a = 1.0
                 for p in self.points:
                     pt = Point()
@@ -216,9 +209,6 @@ class LineTrajectory:
                 # delete
                 marker.action = marker.DELETE
             self.traj_pub.publish(marker)
-            print('publishing traj')
-        elif self.traj_pub.get_subscription_count() == 0:
-            print("Not publishing trajectory, no subscribers")
 
     def publish_viz(self, duration=0):
         if not self.visualize:
