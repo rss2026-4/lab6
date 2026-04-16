@@ -6,14 +6,13 @@ from geometry_msgs.msg import Point, PoseArray, PoseStamped, PoseWithCovarianceS
 from nav_msgs.msg import OccupancyGrid, Odometry
 from path_planning.utils import LineTrajectory
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile
 from std_msgs.msg import ColorRGBA, Header
 from visualization_msgs.msg import Marker
 
 
 class PathPlan(Node):
-    """Listens for goal pose published by RViz and uses it to plan a path from
-    current car pose using RRT-Connect.
-    """
+    """plans from the car pose to the rviz goal with rrt-connect."""
 
     STEP_SIZE = 0.5 # each new branch of tree is at most this distance long (meters)
     GOAL_THRESHOLD = 0.5 # this is the radius of the goal (meters)
@@ -28,10 +27,11 @@ class PathPlan(Node):
         self.declare_parameter('map_topic', "default")
         self.odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
         self.map_topic = self.get_parameter('map_topic').get_parameter_value().string_value
+        traj_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
 
         self.map_sub = self.create_subscription(OccupancyGrid, self.map_topic, self.map_cb, 1)
         self.goal_sub = self.create_subscription(PoseStamped, "/goal_pose", self.goal_cb, 10)
-        self.traj_pub = self.create_publisher(PoseArray, "/trajectory/current", 10)
+        self.traj_pub = self.create_publisher(PoseArray, "/trajectory/current", traj_qos)
         self.pose_sub = self.create_subscription(Odometry, self.odom_topic, self.pose_cb, 10)
         self.tree_a_pub = self.create_publisher(Marker, "/rrt/tree_a", 1)
         self.tree_b_pub = self.create_publisher(Marker, "/rrt/tree_b", 1)
@@ -47,9 +47,7 @@ class PathPlan(Node):
         self.get_logger().info("RRT-Connect planner initialized")
 
     def map_cb(self, msg):
-        """
-        Fires once when the map arrives. Reshape map into 2d array and find free cells
-        """
+        """store the map and free cells."""
         self.map_info = msg.info
 
         self.occupancy_grid = np.array(msg.data, dtype=np.int8).reshape((msg.info.height, msg.info.width))
@@ -66,9 +64,7 @@ class PathPlan(Node):
         self.get_logger().info(f"Map received ")
 
     def world_to_grid(self, x, y):
-        """
-        Convert world coords to grid coords
-        """
+        """world coords to grid coords."""
         dx = x - self.map_origin_x
         dy = y - self.map_origin_y
         mx = self.map_cos * dx + self.map_sin * dy
@@ -78,9 +74,7 @@ class PathPlan(Node):
         return u, v
 
     def grid_to_world(self, u, v):
-        """
-        Convert grid coords to world coords
-        """
+        """grid coords to world coords."""
         mx = u * self.map_info.resolution
         my = v * self.map_info.resolution
         x = self.map_cos * mx - self.map_sin * my + self.map_origin_x
@@ -88,18 +82,14 @@ class PathPlan(Node):
         return x, y
 
     def is_free(self, x, y):
-        """
-        Check if a point is not an obstacle
-        """
+        """check if a point is free."""
         u, v = self.world_to_grid(x, y)
         if 0 <= u < self.map_info.width and 0 <= v < self.map_info.height:
             return self.occupancy_grid[v, u] == 0
         return False
 
     def collision_free(self, p1, p2):
-        """
-        Given two points (forms line segment), check if its collision free
-        """
+        """check if the line segment is free."""
         dist = np.hypot(p2[0] - p1[0], p2[1] - p1[1])
         if dist < 1e-6:
             return self.is_free(p1[0], p1[1])
@@ -136,13 +126,13 @@ class PathPlan(Node):
     # ── RRT-Connect core ─────────────────────────────────────────────────
 
     def nearest(self, tree_points, point):
-        """Return index of nearest node in tree to point."""
+        """get the nearest node index."""
         diffs = tree_points[:len(tree_points)] - np.array(point)
         dists = np.einsum('ij,ij->i', diffs, diffs)
         return int(np.argmin(dists))
 
     def steer(self, from_pt, to_pt):
-        """Step from from_pt toward to_pt by at most STEP_SIZE."""
+        """step toward a point by at most STEP_SIZE."""
         dx = to_pt[0] - from_pt[0]
         dy = to_pt[1] - from_pt[1]
         dist = np.hypot(dx, dy)
@@ -152,9 +142,7 @@ class PathPlan(Node):
         return (from_pt[0] + dx * ratio, from_pt[1] + dy * ratio)
 
     def extend(self, tree_points, tree_parents, point):
-        """Extend tree toward point. Returns (status, new_node_index).
-        status: 'reached' if point was reached, 'advanced' if partial, 'trapped' if blocked.
-        """
+        """grow the tree toward a point."""
         near_idx = self.nearest(tree_points, point)
         near_pt = (tree_points[near_idx][0], tree_points[near_idx][1])
         new_pt = self.steer(near_pt, point)
@@ -169,14 +157,14 @@ class PathPlan(Node):
         return "trapped", -1
 
     def connect(self, tree_points, tree_parents, point):
-        """Greedily extend tree toward point until it reaches or gets trapped."""
+        """keep extending until it reaches or gets stuck."""
         while True:
             status, idx = self.extend(tree_points, tree_parents, point)
             if status != "advanced":
                 return status, idx
 
     def extract_path(self, tree_a_points, tree_a_parents, tree_b_points, tree_b_parents, a_idx, b_idx):
-        """Extract full path from start to goal by merging both trees."""
+        """build the path from both trees."""
         path_a = []
         idx = a_idx
         while idx != -1:
@@ -193,7 +181,7 @@ class PathPlan(Node):
         return path_a + path_b
 
     def sample_free(self):
-        """Sample a random free grid cell and convert it to world coordinates."""
+        """sample a free cell in world coords."""
         if self.free_cells is None or len(self.free_cells) == 0:
             return None
 
@@ -202,14 +190,14 @@ class PathPlan(Node):
         return self.grid_to_world(u + 0.5, v + 0.5)
 
     def clear_current_plan(self):
-        """Clear the currently published plan so the follower does not use stale data."""
+        """clear the current plan."""
         self.trajectory.clear()
         self.traj_pub.publish(self.trajectory.toPoseArray())
         self.trajectory.publish_viz()
         self.clear_trees()
 
     def shortcut_path(self, path):
-        """Iteratively try to shortcut the path by connecting non-adjacent waypoints."""
+        """try to shorten the path."""
         if len(path) <= 2:
             return path
         path = list(path)
@@ -249,7 +237,7 @@ class PathPlan(Node):
             pub.publish(marker)
 
     def get_min_obst_dist(self, path):
-        """Find the minimum distance from the path to any obstacle cell."""
+        """get the min path distance to obstacles."""
         min_dist = np.inf
         for pt in path:
             u, v = self.world_to_grid(pt[0], pt[1])
@@ -279,6 +267,7 @@ class PathPlan(Node):
 
         t_start = time.time()
 
+        # one tree from start, one from goal
         tree_a_points = [np.array(start_point)]
         tree_a_parents = [-1]
         tree_b_points = [np.array(end_point)]
@@ -292,16 +281,21 @@ class PathPlan(Node):
         goal_parents = tree_b_parents
 
         for i in range(self.MAX_ITERATIONS):
+            # pick a random free spot to grow toward
             q_rand = self.sample_free()
             if q_rand is None:
                 continue
 
+            # grow the active tree first
             status_a, idx_a = self.extend(tree_a_points, tree_a_parents, q_rand)
             if status_a != "trapped":
                 new_pt = (tree_a_points[idx_a][0], tree_a_points[idx_a][1])
+
+                # then try to connect the other tree to it
                 status_b, idx_b = self.connect(tree_b_points, tree_b_parents, new_pt)
 
                 if status_b == "reached":
+                    # if they meet, build and publish the path
                     self.publish_tree(self.tree_a_pub, start_tree, start_parents, 1.0, 0.0, 0.0, 0)
                     self.publish_tree(self.tree_b_pub, goal_tree, goal_parents, 1.0, 0.0, 0.0, 1)
 
@@ -326,10 +320,12 @@ class PathPlan(Node):
                     self.trajectory.publish_viz()
                     return
 
+            # update the tree viz every few iters
             if i % self.VIZ_EVERY_N == 0:
                 self.publish_tree(self.tree_a_pub, start_tree, start_parents, 1.0, 0.0, 0.0, 0)
                 self.publish_tree(self.tree_b_pub, goal_tree, goal_parents, 1.0, 0.0, 0.0, 1)
 
+            # swap so each tree gets a turn to lead
             tree_a_points, tree_b_points = tree_b_points, tree_a_points
             tree_a_parents, tree_b_parents = tree_b_parents, tree_a_parents
             swapped = not swapped

@@ -1,4 +1,4 @@
-trajectory_planner:
+rrt_planner:
   ros__parameters:
     odom_topic: "/odom"
     map_topic: "/inflated_map"

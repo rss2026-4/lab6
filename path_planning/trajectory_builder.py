@@ -7,6 +7,7 @@ import time
 from geometry_msgs.msg import Point, PointStamped, PoseArray
 from path_planning.utils import LineTrajectory
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile
 from typing import List, Tuple
 from visualization_msgs.msg import Marker
 
@@ -30,8 +31,9 @@ class BuildTrajectory(Node):
         self.trajectory = LineTrajectory(self, "/built_trajectory")
         self.data_points: List[Tuple[float, float]] = []
         self.count = 0
+        traj_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.click_sub = self.create_subscription(PointStamped, "/clicked_point", self.clicked_pose, 10)
-        self.traj_pub = self.create_publisher(PoseArray, "/trajectory/current", 10)
+        self.traj_pub = self.create_publisher(PoseArray, "/trajectory/current", traj_qos)
         self.trajectory_points = self.create_publisher(Marker, "/traj_pts", 20)
         self.trajectory.publish_viz()
 
