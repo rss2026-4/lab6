@@ -4,10 +4,12 @@ from geometry_msgs.msg import PoseArray, PoseStamped, PoseWithCovarianceStamped
 from nav_msgs.msg import OccupancyGrid, Odometry
 from path_planning.utils import LineTrajectory
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile
 from visualization_msgs.msg import Marker, MarkerArray
 import heapq as hp
 from std_msgs.msg import Header
 import numpy as np
+from scipy.ndimage import distance_transform_edt
 
 
 class PathPlan(Node):
@@ -18,16 +20,26 @@ class PathPlan(Node):
     def __init__(self):
         super().__init__("astar_planner")
         self.declare_parameter('odom_topic', "default")
-        self.declare_parameter('map_topic', "default")
+        self.declare_parameter('map_topic', "/map")
 
         self.odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
         self.map_topic = self.get_parameter('map_topic').get_parameter_value().string_value
+        # Cells within this radius of an obstacle get a clearance penalty
+        # that grows linearly as you approach the wall. Larger radius = path
+        # is pulled further from walls; cells beyond have zero penalty.
+        self.clearance_radius = 25  # cells
+        self.clearance_weight = 5.0  # max penalty per cell at the wall
+        # Weighted A*: priority = g + heur_weight * h. >1 trades optimality
+        # for fewer expansions; 1.0 = optimal.
+        self.heur_weight = 2.0
+
+        latched_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
 
         self.map_sub = self.create_subscription(
             OccupancyGrid,
             self.map_topic,
             self.map_cb,
-            1)
+            latched_qos)
 
         self.goal_sub = self.create_subscription(
             PoseStamped,
@@ -59,7 +71,8 @@ class PathPlan(Node):
         self.trajectory = LineTrajectory(node=self, viz_namespace="/astar/planned_trajectory", color=(0.0, 1.0, 0.0))
 
         self.map = None
-        self.map_dict = None
+        self.map_arr = None
+        self.obstacle_costs = None
         self.map_received = 0
         self.start_pose = None
         self.goal_pose = None
@@ -68,6 +81,7 @@ class PathPlan(Node):
         
 # ── Map Helpers ─────────────────────────────────────────────────
     def map_cb(self, msg):
+            self.get_logger().info("map recieved")
             self.map = msg
             if self.map.data != msg.data or self.map_received == 0:
                 # orientation extraction
@@ -79,8 +93,14 @@ class PathPlan(Node):
                 self.map_cos = np.cos(yaw)
                 self.map_sin = np.sin(yaw)
 
-                self.map_dict = self.create_map_dict()
+                self.map_arr = np.asarray(msg.data, dtype=np.int16).reshape(
+                    msg.info.height, msg.info.width
+                )
+                self.obstacle_costs = self.create_obstacle_costs()
                 self.map_received = 1
+                self.get_logger().info(
+                    f"Calculated obstacle cost lookup table with {int(np.count_nonzero(self.obstacle_costs))} penalized cells"
+                )
     
     def world_to_cell(self, x, y):
         dx = x - self.map_origin_x
@@ -89,8 +109,8 @@ class PathPlan(Node):
         grid_x = dx*self.map_cos + dy*self.map_sin
         grid_y = -dx*self.map_sin + dy*self.map_cos
 
-        u = grid_x//self.map.info.resolution
-        v = grid_y//self.map.info.resolution
+        u = int(grid_x // self.map.info.resolution)
+        v = int(grid_y // self.map.info.resolution)
 
         return (u, v)
     
@@ -104,17 +124,29 @@ class PathPlan(Node):
         y = self.map_sin * mx + self.map_cos * my + self.map_origin_y
         return x, y
 
-    def create_map_dict(self):
-        result = {}
-        for x in range(self.map.info.width):
-            for y in range(self.map.info.height):
-                indx = self.map.info.width * y + x
-                result[(x, y)] = self.map.data[indx]
-        return result
+    def create_obstacle_costs(self, occup_threshold=50):
+        # Exact Euclidean distance (in cells) from each free cell to the
+        # nearest obstacle/unknown cell. One scipy call instead of a Python
+        # offset loop.
+        obstacle_mask = (self.map_arr >= occup_threshold) | (self.map_arr == -1)
+        dist = distance_transform_edt(~obstacle_mask)
+
+        # Linear ramp: max penalty at the wall, zero past clearance_radius.
+        cost_grid = self.clearance_weight * np.maximum(
+            0.0, self.clearance_radius - dist
+        )
+        return cost_grid.astype(np.float32)
 
 # ── Planning Helpers ─────────────────────────────────────────────────
     def init_pose(self, msg):
+        if self.map is None:
+            self.get_logger().warn("No map received yet, cannot set initial pose")
+            return
         self.start_pose = self.world_to_cell(msg.pose.pose.position.x, msg.pose.pose.position.y)
+        self.get_logger().info(
+            f"Received start point: world=({msg.pose.pose.position.x:.2f}, {msg.pose.pose.position.y:.2f}), "
+            f"cell={self.start_pose}"
+        )
         self.trajectory.clear()
         self.trajectory.publish_viz()
 
@@ -122,21 +154,38 @@ class PathPlan(Node):
         pass
 
     def goal_cb(self, msg):
+        if self.map is None:
+            self.get_logger().warn("No map received yet, cannot plan")
+            return
+        if self.start_pose is None:
+            self.get_logger().warn("Set an initial pose before sending a goal")
+            return
         self.goal_pose = self.world_to_cell(msg.pose.position.x, msg.pose.position.y)
-        if self.map is not None:
-            self.plan_path(self.start_pose, self.goal_pose, self.map_received)
+        self.get_logger().info(
+            f"Received goal point: world=({msg.pose.position.x:.2f}, {msg.pose.position.y:.2f}), "
+            f"cell={self.goal_pose}"
+        )
+        self.plan_path(self.start_pose, self.goal_pose, self.map_received)
   
     def plan_path(self, start_point, end_point, map):
         self.clear_min_vis()
-        traj = self.a_star_search(start_point, end_point)
+        self.get_logger().info(f"Planning path from {start_point} to {end_point}")
+        cell_path = self.a_star_search(start_point, end_point)
+        traj = [self.grid_to_world(*c) for c in cell_path]
         self.trajectory.clear()
         self.trajectory.points = traj
         self.trajectory.update_distances()
+        if traj == []:
+            self.traj_pub.publish(self.trajectory.toPoseArray())
+            self.trajectory.publish_viz()
+            return
+
         self.get_logger().info(f"path length: {self.trajectory.distances[-1]:.2f} m")
         self.traj_pub.publish(self.trajectory.toPoseArray())
         self.trajectory.publish_viz()
-        if traj != []:
-            self.get_min_obst_dist(traj)
+        # get_min_obst_dist is useful for debugging, but slow enough to affect planner timing.
+        # if traj != []:
+        #     self.get_min_obst_dist(traj)
 
 # ── A* Functions ─────────────────────────────────────────────────
 
@@ -149,116 +198,93 @@ class PathPlan(Node):
         dy = a[1] - b[1]
         return np.sqrt(dx**2 + dy**2)
 
-    def heuristic(self, pos):
-        """
-        takes in tuple pos (x, y) and returns 
-        euclidean dist to goal
-        """
-        return self.get_dist(pos, self.goal_pose)
+    def a_star_search(self, start, end):
+        # Hot-loop locals: avoid attribute lookups inside the inner loop.
+        map_arr = self.map_arr
+        cost_grid = self.obstacle_costs
+        h, w = map_arr.shape
+        occ_thr = 50
+        SQRT2 = 1.41421356237
+        heur_w = self.heur_weight
+        heappush = hp.heappush
+        heappop = hp.heappop
+        sx, sy = start
+        gx, gy = end
 
-    def cost_function(self, a, b):
-        """
-        takes in tuple pos (x, y) a and b
-        and returns euclidean dist from a to b
-        """
-        return self.get_dist(a, b)
-    
-    def a_star_search(self, start, end, heuristic=heuristic, cost=cost_function):       
-        cost_so_far = {start: 0} # dict where keys correspond to locs and values are cost to get there from start
+        # 8-connected neighbor offsets with their step costs.
+        NEIGHBORS = (
+            (-1, -1, SQRT2), (-1, 0, 1.0), (-1, 1, SQRT2),
+            ( 0, -1, 1.0),                 ( 0, 1, 1.0),
+            ( 1, -1, SQRT2), ( 1, 0, 1.0), ( 1, 1, SQRT2),
+        )
+
+        # g-scores and closed flags as 2D arrays — O(1) array indexing
+        # beats dict hashing on hot path. Unvisited cells stay at +inf.
+        g = np.full((h, w), np.inf, dtype=np.float32)
+        g[sy, sx] = 0.0
+        closed = np.zeros((h, w), dtype=bool)
         came_from = {start: None}
-        frontier = []
-        hp.heapify(frontier)
-        hp.heappush(frontier, (0, start)) #add start to priority queue with lowest cost
+        frontier = [(0.0, start)]
         start_time = self.get_clock().now().nanoseconds / 1e9
+
         while frontier:
-            # self.get_logger().info("Planning")
-            # path = frontier.pop(0)
-            current_pos = hp.heappop(frontier)[1]
-            # self.get_logger().info(f"{current_pos=}")
-            
-            
+            _, current_pos = heappop(frontier)
+            cx, cy = current_pos
+            if closed[cy, cx]:
+                continue
+            closed[cy, cx] = True
+
             if current_pos == end:
-                # self.get_logger().info("%s" % end)
                 end_time = self.get_clock().now().nanoseconds / 1e9
                 self.get_logger().info(f"planning time: {end_time-start_time:.2f} s")
-                return self.extract_path(came_from)
-            
-            for neighbor in self.get_neighbors(current_pos):
-                # self.get_logger().info("visiting neighbor: %s " % neighbor)
-                new_cost = cost_so_far[current_pos] + self.cost_function(current_pos, neighbor)
-                
-                # if neighbor not yet explord or cost to go there is less than before
-                if neighbor not in cost_so_far or new_cost < cost_so_far[neighbor]:
-                    cost_so_far[neighbor] = new_cost
-                    priority = new_cost + self.heuristic(neighbor)
-                    hp.heappush(frontier, (priority, neighbor))
-                    came_from[neighbor] = current_pos
+                path = self.extract_path(came_from)
+                self.get_logger().info(f"Trajectory found with {len(path)} points")
+                return path
 
+            cur_g = g[cy, cx]
+
+            for di, dj, step in NEIGHBORS:
+                nx, ny = cx + di, cy + dj
+                if nx < 0 or ny < 0 or nx >= w or ny >= h:
+                    continue
+                if closed[ny, nx]:
+                    continue
+                val = map_arr[ny, nx]
+                if val == -1 or val >= occ_thr:
+                    continue
+
+                new_cost = cur_g + step + cost_grid[ny, nx]
+                if new_cost < g[ny, nx]:
+                    g[ny, nx] = new_cost
+                    # Octile distance: exact min path on 8-connected grid
+                    # without obstacles. Tighter than Euclidean -> fewer expansions.
+                    hdx = abs(nx - gx)
+                    hdy = abs(ny - gy)
+                    h_est = (hdx + hdy) + (SQRT2 - 2) * min(hdx, hdy)
+                    priority = new_cost + heur_w * h_est
+                    neighbor = (nx, ny)
+                    heappush(frontier, (priority, neighbor))
+                    came_from[neighbor] = current_pos
 
         self.get_logger().info("No Path Found")
         return []
 
     def extract_path(self, node_dict):
         """
-        returns a path as list of (x, y) tuples
-        given dictionary node_dict where keys correspond to 
-        the position that comes from their value
-
-        example input: 
-        node_dict{
-            (start): None
-            (x2, y2): (x1, y1)
-            (x3, y3): (x2, y2)
-        }
+        Walk came_from back from goal to start. Returns a list of cell
+        tuples (x, y) ordered start -> goal.
         """
-        
-        path = [self.grid_to_world(*self.goal_pose)]
-
+        path = [self.goal_pose]
         past_node = self.goal_pose
         while past_node != self.start_pose:
             next_node = node_dict[past_node]
-            path.append(self.grid_to_world(*next_node))
+            path.append(next_node)
             past_node = next_node
-        
         return path[::-1]
 
-    def get_neighbors(self, current_position):
-        """
-        return 3x3 grid of neighbors 
-        with current position at center
-        """
-        # self.get_logger().info("getting neighbors")
-        neighbors = set()
-        for i in range(-1, 2):
-            for j in range(-1, 2):
-                new_pos = (current_position[0]+i, current_position[1]+j)
-                # self.get_logger().info(f"new neighbor: {new_pos}")
-                if new_pos not in neighbors and self.is_valid(new_pos):
-                    # self.get_logger().info(f"new neighbor added: {new_pos}")
-                    neighbors.add(new_pos)
-        return neighbors
-
-    def is_valid(self, pos, occup_threshold=50):
-        pos = (int(pos[0]), int(pos[1]))
-        if pos[0] < 0 or pos[1] < 0:
-            return False
-
-        # unknown space invalid
-        if self.map_dict[pos] == -1:
-            return False
-        
-        # obstacles invalid
-        if self.map_dict[pos] >= occup_threshold:
-            return False
-        
-        return True
-
-    def get_obstacles(self, occup_threshold=0.5):
-        obstacles = set()
-        for point in self.map_dict:
-            if self.map_dict[point] >= occup_threshold:
-                obstacles.add(point)
-        return obstacles
+    def get_obstacles(self, occup_threshold=50):
+        ys, xs = np.where(self.map_arr >= occup_threshold)
+        return set(zip(xs.tolist(), ys.tolist()))
 
     def make_header(self, frame_id, stamp=None):
         if stamp is None:

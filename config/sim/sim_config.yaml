@@ -6,7 +6,7 @@ rrt_planner:
 astar_planner:
   ros__parameters:
     odom_topic: "/odom"
-    map_topic: "/inflated_map"
+    map_topic: "/map"
 trajectory_follower:
   ros__parameters:
     odom_topic: "/odom"
